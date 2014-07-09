@@ -793,6 +793,10 @@ function metatag_entity_view($entity, $entity_type, $view_mode, $langcode, $forc
       if ($entity_language == LANGUAGE_NONE) {
         $langcode = LANGUAGE_NONE;
       }
+      elseif (module_exists('entity_translation') && isset($entity->translations->data[$entity_language])) {
+        // For entities with entity translation entity_language is trustworthy
+        $langcode = $entity_language;
+      }
       else {
         $enabled_languages = field_content_languages();
         foreach (field_language($entity_type, $entity) as $field => $lang) {
@@ -1842,6 +1846,15 @@ function metatag_config_is_enabled($instance, $include_defaults = FALSE, $includ
 function metatag_entity_get_language($entity_type, $entity) {
   // Determine the entity's language.
   $langcode = entity_language($entity_type, $entity);
+
+  // For entities with entity translation we use current language instead of
+  // entity's default one.
+  if (module_exists('entity_translation')) {
+    $global_language_code = $GLOBALS['language']->language;
+    if (isset($entity->translations->data[$global_language_code])) {
+      $langcode = $global_language_code;
+    }
+  }
 
   // If no matching language was found, which will happen for e.g. terms and
   // users, it is normally recommended to use the system default language.
