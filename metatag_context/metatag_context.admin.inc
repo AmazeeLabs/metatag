@@ -85,6 +85,13 @@ function metatag_context_config_add_form_submit($form, &$form_state) {
   $context = metatag_context_load_default_context();
   $context->name = $form_state['values']['name'];
   context_save($context);
+  // Update the i18n string
+  if (function_exists('i18n_string_update')) {
+    foreach ($context->reactions['metatag_context_reaction']['metatags'] as $field => $item) {
+      $name = "metatag:context:" . $context->name . ":" . $field;
+      i18n_string_update($name, $item['value']);
+    }
+  }
   $form_state['redirect'] = 'admin/config/search/metatags/context/' . $context->name;
 }
 
@@ -175,6 +182,13 @@ function metatag_context_config_edit_form_submit($form, &$form_state) {
   $paths = array_combine($paths, $paths);
   $context->conditions['path']['values'] = $paths;
   context_save($context);
+  // Update the i18n string
+  if (function_exists('i18n_string_update')) {
+    foreach ($context->reactions['metatag_context_reaction']['metatags'] as $field => $item) {
+      $name = "metatag:context:" . $context->name . ":" . $field;
+      i18n_string_update($name, $item['value']);
+    }
+  }
   $form_state['redirect'] = 'admin/config/search/metatags/context';
 }
 

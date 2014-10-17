@@ -114,7 +114,9 @@ class metatag_context_reaction extends context_reaction {
           }
           foreach ($metadata_array as $key => $data) {
             if (!empty($data['value'])) {
-              $metatags[$key] = $data;//t(check_plain($data['value']));
+              $name = 'metatag:context:' . $context->name . ':' . $key;
+              $data['value'] = metatag_translate($name, $data['value']);
+              $metatags[$key] = $data;
             }
           }
 

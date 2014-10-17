@@ -69,6 +69,7 @@ function metatag_views_page_alter(&$page) {
 
   // Check if Views metatags are enabled.
   if (!empty($view) && metatag_config_is_enabled('view')) {
+    global $language;
     // The following is taken from views_get_page_view().
     // If a module is still putting in the display like we used to, catch that.
     if (is_subclass_of($view, 'views_plugin_display')) {
@@ -86,16 +87,32 @@ function metatag_views_page_alter(&$page) {
       $metatags = array();
     }
 
+    // Include only view name by default
+    $instance = 'view:' . $view->name;
+    // Include display name if option is overridden
+    if (!$view->display_handler->is_defaulted('metatags')) {
+      $instance = 'view:' . $view->name . ':' . $view->current_display;
+    }
+
     // If meta tags were found but they're not nested for the language, fix it.
     // This leaves some possibility for future versions to support translation.
     if (!empty($metatags) && !isset($metatags[LANGUAGE_NONE])) {
       $metatags = array(LANGUAGE_NONE => $metatags);
+      $translated_metatags = array();
+      $saved_metatags = $view->display_handler->get_option('metatags');
+      foreach ($saved_metatags as $field => $value) {
+        $name = "metatag:" . $instance . ":" . $field;
+        $translated_metatags[$field] = array(
+          'value' => i18n_string_translate($name, $value['value']),
+        );
+      }
+      $metatags[$language->language] = $translated_metatags;
     }
 
     // Build options for meta tag rendering.
-    $instance = 'view:' . $view->name;
     $options = array();
     $options['token data']['view'] = $view;
+    $options['language'] = $language->language;
 
     // Add the metatags.
     $page['content']['metatags'][$instance] = metatag_metatags_view($instance, $metatags, $options);
