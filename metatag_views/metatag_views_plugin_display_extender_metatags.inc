@@ -47,6 +47,18 @@ class metatag_views_plugin_display_extender_metatags extends views_plugin_displa
       $metatags = $form_state['values']['metatags'];
       metatag_filter_values_from_defaults($metatags);
       $this->display->set_option('metatags', $metatags);
+      if ($this->definition['enabled'] && function_exists('i18n_string_update')) {
+        // Include only view name by default
+        $instance = 'view:' . $this->view->name;
+        // Include display name if option is overridden
+        if (!$this->display->is_defaulted('metatags')) {
+          $instance = 'view:' . $this->view->name . ':' . $this->view->current_display;
+        }
+        foreach ($metatags as $field => $item) {
+          $name = "metatag:" . $instance . ":" . $field;
+          i18n_string_update($name, $item['value']);
+        }
+      }
     }
   }
 }
