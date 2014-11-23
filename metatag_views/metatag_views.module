@@ -77,8 +77,7 @@ function metatag_views_page_alter(&$page) {
       }
 
       $translated_metatags = array();
-      $saved_metatags = $view->display_handler->get_option('metatags');
-      $saved_metatags = $view->display_handler->get_option('metatags');
+      $saved_metatags = $view->display_handler->get_option('metatags') ?: array();
       foreach ($saved_metatags as $field => $value) {
         $name = "metatag:" . $instance . ":" . $field;
         $translated_metatags[$field] = array(
