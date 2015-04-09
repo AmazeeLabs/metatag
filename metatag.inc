@@ -69,6 +69,25 @@ class DrupalDefaultMetaTag implements DrupalMetaTagInterface {
       return array();
     }
 
+    $words = explode('--OR--', $value);
+    $found = FALSE;
+    // We will consider the first non-empty word.
+    foreach ($words as $word) {
+      if ($word !== '') {
+        $value = $word;
+        $found = TRUE;
+        // If we are here, we break the current loop, we found the first not
+        // empty word.
+        break;
+      }
+    }
+    // If we did not found any non-empty word, then we just return an empty
+    // array, because we do not want that the value of the metatag to contain
+    // the words separator.
+    if (!$found) {
+      return array();
+    }
+
     // The stack of elements that will be output.
     $elements = array();
 

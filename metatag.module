@@ -1139,6 +1139,7 @@ function metatag_metatags_form(array &$form, $instance, array $metatags = array(
       '#weight' => -10,
     );
   }
+  $form['metatags'][$langcode]['intro_text']['#markup'] .= '<p>' . t('If you want to specify multiple tokens for one value and use the first non-empty one, you can do this by separatting the values by "--OR--". For example: "[node:field1]--OR--[node:field2]". IMPORTANT: this will not work if you add some static text around the token, for example: "some text [node:field1]--OR--[node:field2]" will not work, it will always use the first part before "--OR--" because the text is not empty, it contains already "some text".') . '</p>';
 
   // Only support vertical tabs if there is a vertical tab element.
   foreach (element_children($form) as $key) {
