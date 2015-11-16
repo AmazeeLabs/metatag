@@ -27,7 +27,7 @@ class MetatagEmptyFormatter extends FormatterBase {
   /**
    * {@inheritdoc}
    */
-  public function viewElements(FieldItemListInterface $items, $langcode) {
+  public function viewElements(FieldItemListInterface $items) {
     // Does not actually output anything.
     return array();
   }
