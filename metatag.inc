@@ -174,8 +174,26 @@ class DrupalTextMetaTag extends DrupalDefaultMetaTag {
       '#maxlength' => 1024,
     );
 
+    // Optional handling for items that allow multiple values.
     if (!empty($this->info['multiple'])) {
       $form['value']['#description'] .= ' ' . t('Multiple values may be used, separated by a comma. Note: Tokens that return multiple values will be handled automatically.');
+    }
+
+    // Optional handling for images.
+    if (!empty($this->info['image'])) {
+      $form['value']['#description'] .= ' ' . t('This will be able to extract the URL from an image field.');
+    }
+
+    // Optional support for select_or_other.
+    if ($form['value']['#type'] == 'select' && !empty($this->info['select_or_other']) && module_exists('select_or_other')) {
+      $form['value']['#type'] = 'select_or_other';
+      $form['value']['#other'] = t('Other (please type a value)');
+      $form['value']['#multiple'] = FALSE;
+      $form['value']['#other_unknown_defaults'] = 'other';
+      $form['value']['#other_delimiter'] = FALSE;
+      $form['value']['#theme'] = 'select_or_other';
+      $form['value']['#select_type'] = 'select';
+      $form['value']['#element_validate'] = array('select_or_other_element_validate');
     }
 
     // Support for dependencies, using Form API's #states system.
@@ -203,7 +221,7 @@ class DrupalTextMetaTag extends DrupalDefaultMetaTag {
 
     // Translate the meta tag value prior to the tokens being replace, this
     // allows for different tokens to be inserted for each locale/language.
-    $value = metatag_translate($this->data['value'], "metatag:" . $this->info["name"]);
+    $value = metatag_translate($this->data['value'], $this->info['name']);
 
     if (empty($options['raw'])) {
       // Give other modules the opportunity to use hook_metatag_pattern_alter()
@@ -211,7 +229,40 @@ class DrupalTextMetaTag extends DrupalDefaultMetaTag {
       drupal_alter('metatag_pattern', $value, $options['token data'], $this->info['name']);
       $value = token_replace($value, $options['token data'], $options);
     }
-    return $this->tidyValue($value);
+
+    // Special handling for images.
+    if (!empty($this->info['image'])) {
+      if (!empty($this->info['multiple'])) {
+        $values = explode(',', $value);
+      }
+      else {
+        $values = array($value);
+      }
+      foreach ($values as $key => &$image_value) {
+        // If this contains embedded image tags, extract the image URLs.
+        if (strip_tags($image_value) != $image_value) {
+          $matches = array();
+          preg_match('/src="([^"]*)"/', $val, $matches);
+          if (!empty($matches[1])) {
+            $image_value = $matches[1];
+          }
+        }
+        if (strpos($image_value, 'public://') === 0) {
+          $image_value = file_create_url($image_value);
+        }
+      }
+      $value = implode(',', $values);
+    }
+
+    $value = $this->tidyValue($value);
+
+    // Optionally translate the strings after they've been processed for tokens
+    // and images.
+    if (variable_get('metatag_translate_final_values', FALSE)) {
+      $value = metatag_translate($value, $this->info['name']);
+    }
+
+    return $value;
   }
 }
 
@@ -257,9 +308,12 @@ class DrupalLinkMetaTag extends DrupalTextMetaTag {
  */
 class DrupalTitleMetaTag extends DrupalTextMetaTag {
 
+  /**
+   *
+   */
   public function getElement(array $options = array()) {
     $element = array();
-    $value = $this->getValue($options);
+    $value = htmlentities($this->getValue($options), ENT_QUOTES);
     $element['#attached']['metatag_set_preprocess_variable'][] = array('html', 'head_title', $value);
     $element['#attached']['metatag_set_preprocess_variable'][] = array('html', 'head_array', array('title' => $value));
     return $element;
