@@ -1720,7 +1720,8 @@ function metatag_ctools_render_alter(&$info, $page, $context) {
             // Only the first argument is used.
             $entities = entity_load($entity_name, array($context['args'][0]));
             $entity = array_pop($entities);
-            metatag_entity_view($entity, $entity_name, 'full', NULL);
+            $langcode = metatag_entity_get_language($entity_name, $entity);
+            metatag_entity_view($entity, $entity_name, 'full', $langcode, TRUE);
           }
         }
       }
