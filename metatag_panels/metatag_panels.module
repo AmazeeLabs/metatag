@@ -30,7 +30,7 @@ function metatag_panels_page_manager_variant_operations_alter(&$operations, $han
 function metatag_panels_form($form, $form_state) {
   $handler = $form_state['handler'];
 
-  // Load available contexts
+  // Load available contexts.
   ctools_include('context-task-handler');
   $contexts = ctools_context_handler_get_all_contexts($form_state['task'], $form_state['subtask'], $handler);
 
@@ -53,7 +53,8 @@ function metatag_panels_form($form, $form_state) {
     '#default_value' => isset($handler->conf['metatag_panels']['enabled']) ? $handler->conf['metatag_panels']['enabled'] : FALSE,
   );
 
-  // Don't set any metatag instance name as the configuration data is managed locally within panels.
+  // Don't set any metatag instance name as the configuration data is managed
+  // locally within panels.
   $instance = '';
   $options = array('token types' => $token_types);
   $metatags = empty($handler->conf['metatag_panels']) ? array() : $handler->conf['metatag_panels']['metatags'];
@@ -65,6 +66,34 @@ function metatag_panels_form($form, $form_state) {
 
   // Load the metatag form (passed by reference).
   metatag_metatags_form($form, $instance, $metatags[LANGUAGE_NONE], $options);
+
+  // Add CTools substitutions list to the form.
+  $rows = array();
+  foreach ($contexts as $context) {
+    foreach (ctools_context_get_converters('%' . check_plain($context->keyword) . ':', $context) as $keyword => $title) {
+      $rows[] = array(
+        check_plain($keyword),
+        t('@identifier: @title', array('@title' => $title, '@identifier' => $context->identifier)),
+      );
+    }
+  }
+  if (!empty($rows)) {
+    $form['contexts'] = array(
+      '#title' => t('Substitutions'),
+      '#type' => 'fieldset',
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+    );
+    $header = array(t('Keyword'), t('Value'));
+    $form['contexts']['context'] = array(
+      '#markup' => theme('table', array('header' => $header, 'rows' => $rows)),
+    );
+    $form['contexts']['#states'] = array(
+      'visible' => array(
+        ':input[name="metatags_enabled"]' => array('checked' => TRUE),
+      ),
+    );
+  }
 
   // Modify metatag form defaults.
   $form['metatags']['#collapsible'] = FALSE;
@@ -86,24 +115,31 @@ function metatag_panels_form($form, $form_state) {
 function metatag_panels_form_submit($form, $form_state) {
   $conf = array(
     'enabled' => $form_state['values']['metatags_enabled'],
-    'metatags' => $form_state['values']['metatags'][LANGUAGE_NONE],
+    'metatags' => array(),
   );
 
-  $form_state['handler']->conf['metatag_panels'] = $conf;
-  if ($conf['enabled'] && function_exists('i18n_string_update')) {
-    $handler = $form_state['handler'];
-    $instance = 'panels:' . $handler->task . ':' . $handler->subtask . ':' . $handler->name;
-    foreach ($conf['metatags'] as $field => $item) {
-      $name = "metatag:" . $instance . ":" . $field;
-      i18n_string_update($name, $item['value']);
-    }
+  // Only bother saving the meta tags if they were enabled.
+  if ($conf['enabled']) {
+    $conf['metatags'] = $form_state['values']['metatags'][LANGUAGE_NONE];
+
+    // Translate the meta tags.
+    metatag_translations_update($conf['metatags'], 'metatag_panels:' . $form_state['handler']->name);
   }
+
+  // Save the values for later.
+  $form_state['handler']->conf['metatag_panels'] = $conf;
 }
 
 /**
  * Implements hook_ctools_render_alter().
  */
 function metatag_panels_ctools_render_alter($info, $page, $context) {
+  // By default do not add meta tags to admin pages. To enable meta tags on
+  // admin pages set the 'metatag_tag_admin_pages' variable to TRUE.
+  if (path_is_admin(current_path()) && !variable_get('metatag_tag_admin_pages', FALSE)) {
+    return;
+  }
+
   $output = &drupal_static('metatag_panels');
 
   $handler = $context['handler'];
@@ -112,7 +148,6 @@ function metatag_panels_ctools_render_alter($info, $page, $context) {
     return;
   }
 
-  // This leaves some possibility for future versions to support translation.
   $metatags = $handler->conf['metatag_panels']['metatags'];
   if (!is_array($metatags) || empty($metatags)) {
     $metatags = array();
@@ -123,6 +158,9 @@ function metatag_panels_ctools_render_alter($info, $page, $context) {
   if (!empty($metatags) && !isset($metatags[LANGUAGE_NONE])) {
     $metatags = array(LANGUAGE_NONE => $metatags);
   }
+
+  // Translate all of the meta tags using i18n.
+  metatag_translate_metatags($metatags[LANGUAGE_NONE], 'metatag_panels:' . $handler->name, NULL, FALSE);
 
   // Append global defaults.
   $all_metatags = array();
@@ -135,6 +173,13 @@ function metatag_panels_ctools_render_alter($info, $page, $context) {
 
   if (empty($metatags)) {
     return;
+  }
+
+  // Substitute Panels context variables.
+  foreach ($metatags as $metatag => $data) {
+    if (is_string($data['value']) && strpos(urldecode($data['value']), '%') !== FALSE) {
+      $metatags[$metatag]['value'] = check_plain(ctools_context_keyword_substitute(urldecode($data['value']), array(), $context['handler']->conf['display']->context));
+    }
   }
 
   // Get the contexts that exist within this panel.
@@ -155,25 +200,33 @@ function metatag_panels_ctools_render_alter($info, $page, $context) {
     drupal_set_title($info['title'], PASS_THROUGH);
   }
 
+  // Don't output meta tags that only contain the pager.
+  $current_pager = metatag_get_current_pager();
+
   // Build the Metatag.
-  $instance = 'panels:' . $handler->task . ':' . $handler->subtask . ':' . $handler->name;
   $options = array(
-    'instance' => $instance,
+    'instance' => 'panels:' . $handler->name,
     'token data' => $tokens,
   );
   foreach ($metatags as $metatag => $data) {
-    if (isset($data['value']) && is_string($data['value']) && $data['value'] !== '') {
-      // Substitute context keywords.
-      $data['value'] = ctools_context_keyword_substitute($data['value'], array(), $context['contexts']);
+    // Render CTools context substitution values prior to rendering the meta
+    // tag.
+    if (is_string($data['value'])) {
+      $data['value'] = check_plain(ctools_context_keyword_substitute(trim(urldecode($data['value'])), array(), $task_contexts));
     }
     $metatag_instance = metatag_get_instance($metatag, $data);
 
     if ($metatag_instance) {
-      $output[$metatag] = $metatag_instance->getElement($options);
+      $tag_output = $metatag_instance->getElement($options);
+      // Don't output the pager if that's all there is.
+      if ($tag_output != $current_pager) {
+        $output[$metatag] = $tag_output;
+      }
     }
   }
 
-  // Give third-parties the opportunity to alter the metatag for a given instance.
+  // Give third-parties the opportunity to alter the metatag for a given
+  // instance.
   drupal_alter('metatag_metatags_view', $output, $options['instance']);
 }
 
@@ -183,47 +236,17 @@ function metatag_panels_ctools_render_alter($info, $page, $context) {
  * @see metatag_panels_ctools_render_alter()
  */
 function metatag_panels_page_build(&$page) {
+  // By default do not add meta tags to admin pages. To enable meta tags on
+  // admin pages set the 'metatag_tag_admin_pages' variable to TRUE.
+  if (path_is_admin(current_path()) && !variable_get('metatag_tag_admin_pages', FALSE)) {
+    return;
+  }
+
   $metatags = drupal_static('metatag_panels');
 
   if (!empty($metatags)) {
-    $page['content']['metatags']['global'] = $metatags;
-  }
-}
-
-/**
- * Implements hook_panels_delete_display().
- *
- * Remove saved i18n translations of meta-tags.
- *
- * @param integer $did
- *   Id of the display to delete.
- */
-function metatag_panels_panels_delete_display($did) {
-  if (function_exists('i18n_string_remove')) {
-    // We need the task, sub-task, handler names to create the metatag instance, and conf to get the actual meta-tags.
-    $info = db_select('page_manager_handlers')
-      ->fields('page_manager_handlers', array('did', 'name', 'task', 'subtask', 'handler', 'conf'))
-      ->condition('did', $did)
-      ->execute()
-      ->fetchAssoc();
-
-    if (!empty($info)) {
-      $conf = unserialize($info['conf']);
-      if (!empty($conf['metatag_panels']['metatags'])) {
-        $task = $info['task'];
-        $sub_task = $info['subtask'];
-        $handler_name = $info['name'];
-
-        // Construct the instance.
-        $conf = $conf['metatag_panels'];
-        $instance = 'panels:' . $task . ':' . $sub_task . ':' . $handler_name;
-
-        // For each metatag, remove the i18n string.
-        foreach ($conf['metatags'] as $field => $item) {
-          $name = "metatag:" . $instance . ":" . $field;
-          i18n_string_remove($name, $item['value']);
-        }
-      }
-    }
+    // The page region can be changed.
+    $region = variable_get('metatag_page_region', 'content');
+    $page[$region]['metatags']['global'] = $metatags;
   }
 }
