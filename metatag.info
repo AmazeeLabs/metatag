@@ -4,14 +4,14 @@ package = SEO
 core = 7.x
 
 ; This requires Drupal 7.40 because of the project:module dependency structure.
-dependencies[] = drupal:system (>= 7.40)
+dependencies[] = system (>= 7.40)
 
 ; CTools is required.
-dependencies[] = ctools:ctools
+dependencies[] = ctools
 
 ; Requires Token; v7.x-1.6 is highly recommended due to bugs with certain tags
 ; when using older versions.
-dependencies[] = token:token
+dependencies[] = token
 
 configure = admin/config/search/metatags
 
